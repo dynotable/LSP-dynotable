@@ -1,0 +1,10 @@
+{
+	// The DynoTable app gives the language features. With `dynotable-lsp` on your PATH, the package runs it;
+	// otherwise it runs the `dynotable-cli` version that this package pins.
+	"command": ["${node_bin}", "${server_path}"],
+	"selector": "source.sql.dynotable | source.partiql | source.opensearch",
+	// Run lenses need a results grid. Run your queries in the DynoTable app.
+	"disabled_capabilities": {
+		"codeLensProvider": true
+	}
+}

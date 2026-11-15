@@ -1,0 +1,4 @@
+-- SYNTAX TEST "Packages/LSP-dynotable/DynoTable SQL.sublime-syntax"
+
+SELECT * FROM orders WHERE status = 'shipped'
+-- <- source.sql.dynotable keyword.other.dml.sql

@@ -1,0 +1,27 @@
+%YAML 1.2
+---
+name: OpenSearch
+scope: source.opensearch
+version: 2
+
+extends: Packages/JSON/JSON.sublime-syntax
+
+file_extensions:
+  - opensearch
+
+contexts:
+
+  main:
+    # Only line 0 can hold the index directive. Without this flag, the JSON
+    # prototype would take the `//` as a plain line comment first.
+    - meta_include_prototype: false
+    - match: ^\s*(//)\s*dynotable:.*$\n?
+      scope: comment.line.directive.dynotable
+      captures:
+        1: punctuation.definition.comment.dynotable
+      set: body
+    - match: ''
+      set: body
+
+  body:
+    - include: values

@@ -1,0 +1,27 @@
+name: Syntax Tests
+
+on:
+  push:
+    paths:
+      - '.github/workflows/syntax.yml'
+      - '**.sublime-syntax'
+      - '**/syntax_test_*'
+  pull_request:
+    paths:
+      - '.github/workflows/syntax.yml'
+      - '**.sublime-syntax'
+      - '**/syntax_test_*'
+
+jobs:
+  syntax_tests:
+    name: Syntax Tests (build 4215)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SublimeText/syntax-test-action@v2
+        with:
+          build: 4215
+          # The syntaxes extend the built-in SQL and JSON syntaxes. Keep this tag equal to the build.
+          default_packages: v4215
+          package_name: LSP-dynotable

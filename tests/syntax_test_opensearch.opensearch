@@ -1,0 +1,7 @@
+// dynotable: SYNTAX TEST "Packages/LSP-dynotable/OpenSearch.sublime-syntax"
+// dynotable: <- source.opensearch comment.line.directive.dynotable punctuation.definition.comment.dynotable
+// dynotable: ^^^^^^^^^^^ source.opensearch comment.line.directive.dynotable
+{"match": {"status": "shipped"}}
+// dynotable: <- source.opensearch meta.mapping.json punctuation.section.mapping.begin.json
+//dynotable: index=orders
+// dynotable: <- source.opensearch comment.line.double-slash.json - comment.line.directive.dynotable

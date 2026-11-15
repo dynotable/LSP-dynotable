@@ -1,0 +1,6 @@
+[
+	{
+		"caption": "DynoTable: Retry Connection",
+		"command": "dynotable_retry"
+	}
+]

@@ -1,0 +1,4 @@
+-- SYNTAX TEST "Packages/LSP-dynotable/PartiQL.sublime-syntax"
+
+SELECT * FROM "orders" WHERE status = 'shipped'
+-- <- source.partiql keyword.other.dml.sql
