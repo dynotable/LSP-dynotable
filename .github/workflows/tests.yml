@@ -1,0 +1,21 @@
+name: Unit Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit_tests:
+    # 3.8 is the floor in .python-version; build 4215 runs the plugin on plugin_host-3.14.
+    name: Unit Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.8', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv run -p ${{ matrix.python }} python -m unittest discover -s tests
