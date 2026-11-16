@@ -11,6 +11,7 @@ on:
       - '.github/workflows/syntax.yml'
       - '**.sublime-syntax'
       - '**/syntax_test_*'
+  workflow_dispatch:
 
 jobs:
   syntax_tests:
