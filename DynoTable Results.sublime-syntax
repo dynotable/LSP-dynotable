@@ -1,0 +1,21 @@
+%YAML 1.2
+---
+# The DynoTable Results panel. A plain-text grid cannot tell the string "null" from a null, so only the header and
+# the summary get a scope. Every table line starts with a box character; the summary starts with a digit.
+name: DynoTable Results
+scope: text.dynotable-results
+version: 2
+hidden: true
+
+contexts:
+
+  main:
+    - match: ^┌.*\n
+      push: header
+    - match: ^\d.* ms$
+      scope: comment.line.summary.dynotable
+
+  header:
+    - match: ^│.*$
+      scope: markup.heading.dynotable
+      pop: true

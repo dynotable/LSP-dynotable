@@ -1,5 +1,32 @@
 [
 	{
+		"caption": "DynoTable: Run Statement",
+		"command": "dynotable_run"
+	},
+	{
+		"caption": "DynoTable: Sort Results",
+		"command": "dynotable_sort_results"
+	},
+	{
+		"caption": "DynoTable: Copy Results as CSV",
+		"command": "dynotable_copy_results",
+		"args": {"format": "csv"}
+	},
+	{
+		"caption": "DynoTable: Copy Results as JSON",
+		"command": "dynotable_copy_results",
+		"args": {"format": "json"}
+	},
+	{
+		"caption": "DynoTable: Copy Results as Markdown",
+		"command": "dynotable_copy_results",
+		"args": {"format": "markdown"}
+	},
+	{
+		"caption": "DynoTable: Cancel Run",
+		"command": "dynotable_cancel_run"
+	},
+	{
 		"caption": "DynoTable: Retry Connection",
 		"command": "dynotable_retry"
 	},

@@ -1,0 +1,20 @@
+# SYNTAX TEST "Packages/LSP-dynotable/DynoTable Results.sublime-syntax"
+┌────┬──────┐
+│ id │ name │
+# <- text.dynotable-results markup.heading.dynotable
+#^^^^^^^^^^^^ markup.heading.dynotable
+├────┼──────┤
+# <- - markup.heading
+│  1 │ 5 ms │
+# <- - markup.heading - comment.line.summary
+#^^^^^^^^^^^^ - markup.heading - comment.line.summary
+└────┴──────┘
+1 of 1 rows · 150 items scanned · 194 ms
+# <- comment.line.summary.dynotable
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.summary.dynotable
+Run failed: The run was cancelled before it finished. 3 ms
+# <- - comment.line.summary
+Run cancelled.
+# <- - comment.line.summary - markup.heading
+0 rows · 12 ms
+# <- text.dynotable-results comment.line.summary.dynotable
