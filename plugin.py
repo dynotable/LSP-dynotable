@@ -20,6 +20,7 @@ try:
     from LSP.plugin.core.registry import windows
 except ImportError:
     windows = None
+    print("LSP-dynotable: LSP.plugin.core.registry.windows is gone; reopen a DynoTable file after starting the app")
 
 # Milliseconds between checks while LSP starts another session in the window.
 _RECOVERY_WAIT_MS = 1000
@@ -131,8 +132,9 @@ class DynotableViewListener(sublime_plugin.ViewEventListener):
                 return
             attached = any(session.config.name == LspDynotablePlugin.name for session in listener.sessions_async())
             starting = manager.is_session_starting()
-        except Exception:
+        except Exception as ex:
             # Not public API (see the import): when it changes, recovery is off and the rest still works.
+            print(f"LSP-dynotable: view recovery is off: {ex!r}")
             return
         refused = window.id() in LspDynotablePlugin.refused_windows
         step = recovery_step(attached, refused, starting, _app_running())
