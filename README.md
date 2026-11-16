@@ -68,8 +68,8 @@ Use `ctrl+enter` on Linux and Windows. The `context` keeps the core key in all o
 ## Requirements
 
 - Sublime Text build 4200 or later.
-- macOS on Apple silicon, Linux x64 or Windows x64. `dynotable-lsp` has no binary for other
-  platforms yet.
+- macOS (Apple silicon or Intel), Linux x64 or Windows x64. `dynotable-lsp` has no binary for
+  other platforms yet.
 - DynoTable 1.20.0 or later, with the Editor integration switched on.
 - `dynotable-lsp` on your `PATH`, or nothing: when `dynotable-lsp` is not on your `PATH`, the
   package installs the `dynotable-cli` version that it pins. It runs it with Node.js from your

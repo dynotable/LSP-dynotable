@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — 2026-11-16
+
+- The server is `dynotable-cli` 0.1.2, which adds Intel Macs.
+
 ## 1.0.0 — 2026-11-16
 
 - First release. DynoTable SQL (`.dtsql`, `.dynotable.sql`), PartiQL (`.partiql`) and OpenSearch
