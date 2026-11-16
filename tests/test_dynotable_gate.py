@@ -57,6 +57,8 @@ class StartCommandTest(unittest.TestCase):
 class LatchesRefusalTest(unittest.TestCase):
     def test_only_a_serving_app_refuses(self):
         self.assertTrue(latches_refusal(initialized=False, app_running=True))
+        # A clean end of a working session is no refusal: reopening a file must not need Retry.
+        self.assertFalse(latches_refusal(initialized=True, app_running=True))
         # The app went away during the start: when it comes back, the server must start with no command.
         self.assertFalse(latches_refusal(initialized=False, app_running=False))
 
