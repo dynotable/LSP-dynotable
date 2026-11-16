@@ -97,7 +97,9 @@ class LspDynotablePlugin(LspPlugin):
         session = self.weaksession()
         if session is None or not arguments or not isinstance(arguments[0], dict):
             return Promise.resolve(None)
-        return _start_async(session, RunEvent("start-execute", _Token(session)), arguments[0], None)
+        if not isinstance(arguments[0].get("uri"), str):
+            return Promise.resolve(None)
+        return _start_async(session, RunEvent("start-execute", _Token(session)), arguments[0], None, None)
 
     def on_session_end_async(self, exit_code: int | None, exception: Exception | None) -> None:
         # LSP drops the handlers of the requests in flight without calling them, so the run ends here.
