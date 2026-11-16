@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from .dynotable_gate import app_running, gate, latches_refusal, pid_alive, port_file_path, recovery_step, start_command
-from .dynotable_results import RUN_COMMAND, Run, RunEvent, csv_text, grid_text, is_result, json_text, markdown_text
-from .dynotable_results import pick_lens, run_start, run_step, sort_order, visible
+from .dynotable_results import RUN_COMMAND, CommandArgs, Run, RunEvent, csv_text, grid_text, is_result, json_text
+from .dynotable_results import markdown_text, pick_lens, run_start, run_step, sort_order, visible
 from LSP.plugin import Error, IsApplicableContext, LspPlugin, LspTextCommand, Notification, OnPreStartContext, Promise
 from LSP.plugin import Request, command_handler, region_to_range, text_document_identifier
 from lsp_utils import NodeManager
 from pathlib import Path
 from sublime_lib import ResourcePath
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 import os
 import shutil
 import sublime
@@ -28,6 +28,13 @@ except ImportError:
 
 # Milliseconds between checks while LSP starts another session in the window.
 _RECOVERY_WAIT_MS = 1000
+
+_PANEL = "DynoTable Results"
+_RUNNING = "A statement is running. Wait for it, or run DynoTable: Cancel Run."
+_NO_LENS = "No statement at the cursor. A file with a syntax error has no runnable statements."
+_NO_RESULT = "There are no results. Run a statement first."
+_BAD_ANSWER = "DynoTable sent an answer that LSP-dynotable cannot read. Update LSP-dynotable and DynoTable."
+_COPY = {"csv": ("CSV", csv_text), "json": ("JSON", json_text), "markdown": ("Markdown", markdown_text)}
 
 
 def plugin_loaded() -> None:
@@ -54,6 +61,9 @@ class LspDynotablePlugin(LspPlugin):
     # Ids of the windows whose session the app refused. A refusal can be about one project only (a bad
     # `.dynotable.json`), so it must not close the gate in other windows.
     refused_windows: set[int] = set()
+    # Per window id: the active run, and the last result, which Sort and Copy use.
+    runs: dict[int, Run] = {}
+    results: dict[int, dict[str, Any]] = {}
 
     @classmethod
     def is_applicable_async(cls, context: IsApplicableContext) -> bool:
@@ -113,18 +123,6 @@ class LspDynotablePlugin(LspPlugin):
             )
 
 
-_PANEL = "DynoTable Results"
-_RUNNING = "A statement is running. Wait for it, or run DynoTable: Cancel Run."
-_NO_LENS = "No statement at the cursor. A file with a syntax error has no runnable statements."
-_NO_RESULT = "There are no results. Run a statement first."
-_BAD_ANSWER = "DynoTable sent an answer that LSP-dynotable cannot read. Update LSP-dynotable and DynoTable."
-_COPY = {"csv": ("CSV", csv_text), "json": ("JSON", json_text), "markdown": ("Markdown", markdown_text)}
-
-# Per window id: the active run, and the last result, which Sort and Copy use.
-_runs: dict[int, Run] = {}
-_results: dict[int, dict[str, Any]] = {}
-
-
 class _Token:
     """One run. A new object per run, so the answer of an older run can see that it is not the active run."""
 
@@ -135,11 +133,11 @@ class _Token:
 
 def _step(window_id: int, event: RunEvent) -> str | None:
     """Applies `run_step` to the run of the window. Call it on the async thread only, so that no two steps overlap."""
-    state, action = run_step(_runs.get(window_id), event)
+    state, action = run_step(LspDynotablePlugin.runs.get(window_id), event)
     if state is None:
-        _runs.pop(window_id, None)
+        LspDynotablePlugin.runs.pop(window_id, None)
     else:
-        _runs[window_id] = state
+        LspDynotablePlugin.runs[window_id] = state
     return action
 
 
@@ -187,7 +185,7 @@ def _purge_async(session: Session, uri: str, view: sublime.View) -> None:
         print(f"LSP-dynotable: a run can miss the last edit: {ex!r}")
 
 
-def _start_async(token: _Token, args: dict[str, Any], line: int | None, view: sublime.View | None) -> Promise[None]:
+def _start_async(token: _Token, args: CommandArgs, line: int | None, view: sublime.View | None) -> Promise[None]:
     """
     Starts a run: `executeCommand` with `args`, or, when `line` (0-based) is given, first `codeLens` to find the
     statement on it. `view` is `None` for a lens click. The promise resolves `None` when the run ends.
@@ -200,7 +198,7 @@ def _start_async(token: _Token, args: dict[str, Any], line: int | None, view: su
     if _step(window.id(), RunEvent("start-execute" if line is None else "start-lens", token)) == "refuse":
         window.status_message(_RUNNING)
         return Promise.resolve(None)
-    _results.pop(window.id(), None)
+    LspDynotablePlugin.results.pop(window.id(), None)
     # Not for a lens click: its range is for the text that the server has, and a purge first can shift the text
     # under that range.
     if view is not None:
@@ -231,7 +229,7 @@ def _on_lenses_async(session: Session, token: _Token, line: int, answer: Any) ->
     return _send_execute_async(session, token, lens["command"]["arguments"][0])
 
 
-def _send_execute_async(session: Session, token: _Token, args: dict[str, Any]) -> Promise[None]:
+def _send_execute_async(session: Session, token: _Token, args: CommandArgs) -> Promise[None]:
     request = Request("workspace/executeCommand", {"command": RUN_COMMAND, "arguments": [args]})
     promise, request_id = session.send_request_task_2(request)
     _step(token.window.id(), RunEvent("sent", token, request_id))
@@ -249,17 +247,17 @@ def _on_answer_async(token: _Token, answer: Any) -> None:
     if not is_result(answer):
         _write(token.window, _failure(_BAD_ANSWER))
         return
-    _results[window_id] = answer
+    LspDynotablePlugin.results[window_id] = answer
     _write(token.window, grid_text(answer, list(range(len(answer["rows"])))))
 
 
 def _cancel_async(window: sublime.Window) -> None:
     window_id = window.id()
-    state = _runs.get(window_id)
+    state = LspDynotablePlugin.runs.get(window_id)
     action = _step(window_id, RunEvent("cancel"))
     if action == "cancel-request" and state is not None:
         # Not `cancel_request_async`: it ends the request here and drops the answer of the app, which says why.
-        session = cast(_Token, state.token).session()
+        session = state.token.session()
         if session:
             session.send_notification(Notification("$/cancelRequest", {"id": state.request_id}))
     elif action == "cancelled":
@@ -318,7 +316,7 @@ class DynotableRunCommand(LspTextCommand):
 
 class DynotableSortResultsCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
-        result = _results.get(self.window.id())
+        result = LspDynotablePlugin.results.get(self.window.id())
         if not result or not result["columns"]:
             self.window.status_message(_NO_RESULT)
             return
@@ -337,7 +335,7 @@ class DynotableSortResultsCommand(sublime_plugin.WindowCommand):
 
     def on_direction(self, result: dict[str, Any], column: int, choice: int) -> None:
         # A run that ended while the quick panels were open replaced the result in the panel.
-        if choice < 0 or _results.get(self.window.id()) is not result:
+        if choice < 0 or LspDynotablePlugin.results.get(self.window.id()) is not result:
             return
         _write(self.window, grid_text(result, sort_order(result, column, choice == 1)))
 
@@ -346,7 +344,7 @@ class DynotableCopyResultsCommand(sublime_plugin.WindowCommand):
     """All rows in query order, also after a sort, with the bytes of the VS Code extension's copy."""
 
     def run(self, format: str = "csv") -> None:
-        result = _results.get(self.window.id())
+        result = LspDynotablePlugin.results.get(self.window.id())
         if not result:
             self.window.status_message(_NO_RESULT)
             return
@@ -362,13 +360,14 @@ class DynotableCancelRunCommand(sublime_plugin.WindowCommand):
 
 
 def _forget_async(window_id: int) -> None:
-    _runs.pop(window_id, None)
-    _results.pop(window_id, None)
+    LspDynotablePlugin.runs.pop(window_id, None)
+    LspDynotablePlugin.results.pop(window_id, None)
+    LspDynotablePlugin.refused_windows.discard(window_id)
 
 
 class DynotableWindowListener(sublime_plugin.EventListener):
     def on_pre_close_window(self, window: sublime.Window) -> None:
-        # `_runs` changes on the async thread only (see `_step`).
+        # `runs` changes on the async thread only (see `_step`).
         window_id = window.id()
         sublime.set_timeout_async(lambda: _forget_async(window_id))
 

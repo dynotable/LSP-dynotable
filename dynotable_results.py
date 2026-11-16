@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Dict, NamedTuple
 import json
 import re
 
 Row = Dict[str, Any]
 Result = Dict[str, Any]
+CommandArgs = Dict[str, Any]
 
 RUN_COMMAND = "dynotable.runStatement"
 
@@ -20,7 +21,7 @@ _LINE_BREAK = re.compile(r"\r\n|\r|\n")
 
 def visible(text: str) -> str:
     """`text` with every C0 and C1 control character and DEL made visible, so data cannot break the grid."""
-    return _CONTROL.sub(lambda m: _NAMED.get(m.group(), "\\x{:02x}".format(ord(m.group()))), text)
+    return _CONTROL.sub(lambda m: _NAMED.get(m.group(), f"\\x{ord(m.group()):02x}"), text)
 
 
 def js_number(value: float) -> str:
@@ -74,7 +75,7 @@ def js_json(value: Any) -> str:
         return "[" + ",".join(js_json(item) for item in value) + "]"
     if isinstance(value, dict):
         return "{" + ",".join(_string(key) + ":" + js_json(value[key]) for key in value) + "}"
-    raise TypeError("Not a JSON value: {!r}".format(value))
+    raise TypeError(f"Not a JSON value: {value!r}")
 
 
 def _js_pretty(value: Any, indent: str) -> str:
@@ -91,7 +92,7 @@ def _js_pretty(value: Any, indent: str) -> str:
     return js_json(value)
 
 
-def _cell(row: Row, column: str) -> Tuple[str, str]:
+def _cell(row: Row, column: str) -> tuple[str, str]:
     """`cellKind` of VS Code's grid: the text and the kind ("missing", "null", "number", "string" or "json")."""
     if column not in row:
         return "", "missing"
@@ -116,7 +117,7 @@ def _is_empty(kind: str) -> bool:
     return kind in ("missing", "null")
 
 
-def _is_numeric(kinds: List[str]) -> bool:
+def _is_numeric(kinds: list[str]) -> bool:
     return all(_is_empty(kind) or kind == "number" for kind in kinds)
 
 
@@ -125,19 +126,19 @@ def summary(result: Result) -> str:
     returned = result["returnedRows"]
     total = result["totalRows"]
     if total is None:
-        parts = ["{} {}".format(js_number(returned), "row" if returned == 1 else "rows")]
+        parts = [f"{js_number(returned)} {'row' if returned == 1 else 'rows'}"]
     else:
-        parts = ["{} of {} rows".format(js_number(returned), js_number(total))]
+        parts = [f"{js_number(returned)} of {js_number(total)} rows"]
     if result["truncated"]:
         cap = js_number(result["effectiveRowCap"])
-        parts.append("limited to {} rows".format(cap) + (", total unknown" if total is None else ""))
+        parts.append(f"limited to {cap} rows" + (", total unknown" if total is None else ""))
     if result.get("itemsScanned") is not None:
-        parts.append("{} items scanned".format(js_number(result["itemsScanned"])))
-    parts.append("{} ms".format(js_number(result["elapsedMs"])))
+        parts.append(f"{js_number(result['itemsScanned'])} items scanned")
+    parts.append(f"{js_number(result['elapsedMs'])} ms")
     return " · ".join(parts)
 
 
-def grid_text(result: Result, order: List[int]) -> str:
+def grid_text(result: Result, order: list[int]) -> str:
     """
     The panel text: a box table with the header and one line per row in `order` (row indices), then the summary.
 
@@ -157,7 +158,7 @@ def grid_text(result: Result, order: List[int]) -> str:
     def border(left: str, middle: str, right: str) -> str:
         return left + middle.join("─" * (width + 2) for width in widths) + right
 
-    def line(values: List[str], right: List[bool]) -> str:
+    def line(values: list[str], right: list[bool]) -> str:
         fitted = [v.rjust(w) if r else v.ljust(w) for v, w, r in zip(values, widths, right)]
         return "│ " + " │ ".join(fitted) + " │"
 
@@ -167,7 +168,7 @@ def grid_text(result: Result, order: List[int]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def sort_order(result: Result, column: int, descending: bool) -> List[int]:
+def sort_order(result: Result, column: int, descending: bool) -> list[int]:
     """Row indices sorted by one column, as VS Code's grid sorts: stable, empty cells last in both directions."""
     name = result["columns"][column]
     cells = [_cell(row, name) for row in result["rows"]]
@@ -223,7 +224,7 @@ def _markdown_cell(text: str) -> str:
     return _LINE_BREAK.sub(" ", text.replace("\\", "\\\\").replace("|", "\\|"))
 
 
-def _markdown_line(texts: List[str]) -> str:
+def _markdown_line(texts: list[str]) -> str:
     return "| " + " | ".join(_markdown_cell(text) for text in texts) + " |"
 
 
@@ -234,11 +235,15 @@ def markdown_text(result: Result) -> str:
     return "\n".join(lines)
 
 
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _statement_lines(lens: Any) -> Optional[Tuple[int, int]]:
+def _statement_lines(lens: Any) -> tuple[int, int] | None:
     """The first and last line of a Run lens's statement, or `None` for another lens or a malformed one."""
     try:
         command = lens["command"]
@@ -248,13 +253,13 @@ def _statement_lines(lens: Any) -> Optional[Tuple[int, int]]:
         start, end, character = statement["start"]["line"], statement["end"]["line"], statement["end"]["character"]
     except (KeyError, IndexError, TypeError):
         return None
-    if not all(isinstance(value, int) and not isinstance(value, bool) for value in (start, end, character)):
+    if not all(_is_int(value) for value in (start, end, character)):
         return None
     # An end at character 0 of a later line does not hold that line.
     return start, (end - 1 if character == 0 and end > start else end)
 
 
-def pick_lens(lenses: List[Any], line: int) -> Optional[Dict[str, Any]]:
+def pick_lens(lenses: list[Any], line: int) -> dict[str, Any] | None:
     """
     The first Run lens whose statement holds `line` (0-based). The statement range is in the lens's argument; the
     lens's own range is only an anchor.
@@ -267,8 +272,8 @@ def pick_lens(lenses: List[Any], line: int) -> Optional[Dict[str, Any]]:
 
 
 def run_start(
-    uri: str, selection: Optional[Dict[str, Any]], opensearch: bool, row: int
-) -> Tuple[Result, Optional[int]]:
+    uri: str, selection: dict[str, Any] | None, opensearch: bool, row: int
+) -> tuple[CommandArgs, int | None]:
     """
     What "DynoTable: Run Statement" runs: the `executeCommand` argument, and the cursor row (0-based) when the
     statement must first be found with `codeLens`, else `None`. `selection` is the selected range, or `None`.
@@ -301,9 +306,9 @@ def is_result(answer: Any) -> bool:
 class Run(NamedTuple):
     """The active run of a window. `token` is a new object per run; `request_id` is the `executeCommand` id."""
 
-    token: object
+    token: Any
     phase: str  # "lens": `codeLens` in flight. "execute": `executeCommand` in flight.
-    request_id: Optional[int] = None
+    request_id: int | None = None
     cancel_sent: bool = False
 
 
@@ -321,10 +326,10 @@ class RunEvent(NamedTuple):
 
     kind: str
     token: object = None
-    request_id: Optional[int] = None
+    request_id: int | None = None
 
 
-def run_step(state: Optional[Run], event: RunEvent) -> Tuple[Optional[Run], Optional[str]]:
+def run_step(state: Run | None, event: RunEvent) -> tuple[Run | None, str | None]:
     """
     The next run state and what the plugin must do, or `None` for nothing.
 
