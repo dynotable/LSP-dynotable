@@ -1,5 +1,5 @@
 {
-  "include": ["plugin.py", "dynotable_gate.py", "dynotable_results.py", "tests"],
+  "include": ["plugin.py", "dynotable", "tests"],
   "pythonVersion": "3.8",
   "typeCheckingMode": "standard",
   "reportMissingImports": "none",

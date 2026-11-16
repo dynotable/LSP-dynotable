@@ -1,6 +1,6 @@
 import unittest
 
-from dynotable_results import (
+from dynotable.results import (
     Run,
     RunEvent,
     csv_text,

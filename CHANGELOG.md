@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 — 2026-11-16
+
+- The helper modules moved into the `dynotable` subpackage, so Sublime Text does not load them as separate plugins.
+
 ## 1.0.1 — 2026-11-16
 
 - The server is `dynotable-cli` 0.1.2, which adds Intel Macs.

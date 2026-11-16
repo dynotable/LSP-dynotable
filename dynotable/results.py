@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, NamedTuple
+from typing import Any, Dict, Mapping, NamedTuple
 import json
 import re
 
@@ -272,7 +272,7 @@ def pick_lens(lenses: list[Any], line: int) -> dict[str, Any] | None:
 
 
 def run_start(
-    uri: str, selection: dict[str, Any] | None, opensearch: bool, row: int
+    uri: str, selection: Mapping[str, Any] | None, opensearch: bool, row: int
 ) -> tuple[CommandArgs, int | None]:
     """
     What "DynoTable: Run Statement" runs: the `executeCommand` argument, and the cursor row (0-based) when the

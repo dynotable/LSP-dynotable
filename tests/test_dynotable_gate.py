@@ -1,6 +1,6 @@
 import unittest
 
-from dynotable_gate import app_running, gate, latches_refusal, port_file_path, recovery_step, start_command
+from dynotable.gate import app_running, gate, latches_refusal, port_file_path, recovery_step, start_command
 
 PATH = "/home/u/.config/DynoTable/lsp-port.json"
 

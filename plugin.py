@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from .dynotable_gate import app_running, gate, latches_refusal, pid_alive, port_file_path, recovery_step, start_command
-from .dynotable_results import RUN_COMMAND, CommandArgs, Run, RunEvent, csv_text, grid_text, is_result, json_text
-from .dynotable_results import markdown_text, pick_lens, run_start, run_step, sort_order, visible
+from .dynotable.gate import app_running, gate, latches_refusal, pid_alive, port_file_path, recovery_step, start_command
+from .dynotable.results import RUN_COMMAND, CommandArgs, Run, RunEvent, csv_text, grid_text, is_result, json_text
+from .dynotable.results import markdown_text, pick_lens, run_start, run_step, sort_order, visible
 from LSP.plugin import Error, IsApplicableContext, LspPlugin, LspTextCommand, Notification, OnPreStartContext, Promise
 from LSP.plugin import Request, command_handler, region_to_range, text_document_identifier
 from lsp_utils import NodeManager
