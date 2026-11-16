@@ -66,8 +66,9 @@ the features back:
 ## When DynoTable refuses the connection
 
 DynoTable refuses the connection when you are signed out, when the Editor integration is off, or
-when the `.dynotable.json` of the project is not correct. The language server then stays stopped
-in that window. Other windows keep their language server.
+when the `.dynotable.json` of the project is not correct. The status bar then says "DynoTable
+refused the connection", and the console (View → Show Console) gives the reason. The language
+server stays stopped in that window. Other windows keep their language server.
 
 Fix the cause, then run "DynoTable: Retry Connection" from the Command Palette in that window.
 

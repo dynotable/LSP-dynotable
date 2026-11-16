@@ -81,15 +81,38 @@ class LspDynotablePlugin(LspPlugin):
         # Per session: with two windows, a shared flag would let one session's answer mark the other.
         self.initialized = False
         session = weaksession()
-        self.window_id = session.window.id() if session else None
+        self.window = session.window if session else None
+        self.window_id = self.window.id() if self.window else None
 
     def on_initialized_async(self) -> None:
         self.initialized = True
 
     def on_session_end_async(self, exit_code: int | None, exception: Exception | None) -> None:
-        # A refused `initialize` ends here with (None, None), so the exit code tells nothing.
-        if self.window_id is not None and latches_refusal(self.initialized, _app_running()):
+        # A refused `initialize` ends here with (None, None): the reason goes only to LSP's crash line in the console.
+        if self.window and self.window_id is not None and latches_refusal(self.initialized, _app_running()):
             type(self).refused_windows.add(self.window_id)
+            self.window.status_message(
+                "DynoTable refused the connection. See the console, fix the cause, then run DynoTable: Retry Connection."
+            )
+
+
+def _attach_async(view: sublime.View) -> None:
+    # Not `lsp_check_applicable`: when that command has to start the session, LSP 2.16 attaches the view before
+    # `initialize` returns, and the view never gets `didOpen`. LSP's listener queue attaches it after `initialize`.
+    window = view.window()
+    if window is None or not view.is_valid() or view.is_loading():
+        return
+    try:
+        manager = windows.lookup(window) if windows else None
+        listener = manager.listener_for_view(view) if manager else None
+    except Exception as ex:
+        print(f"LSP-dynotable: view recovery is off: {ex!r}")
+        manager = listener = None
+    if manager and listener:
+        manager.register_listener_async(listener)
+    else:
+        print("LSP-dynotable: reopen the DynoTable file if it shows no diagnostics")
+        view.run_command("lsp_check_applicable", {"session_name": LspDynotablePlugin.name})
 
 
 class DynotableRetryCommand(sublime_plugin.WindowCommand):
@@ -98,7 +121,7 @@ class DynotableRetryCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
         LspDynotablePlugin.refused_windows.discard(self.window.id())
         if view := self.window.active_view():
-            view.run_command("lsp_check_applicable", {"session_name": LspDynotablePlugin.name})
+            sublime.set_timeout_async(lambda: _attach_async(view))
 
 
 class DynotableViewListener(sublime_plugin.ViewEventListener):
@@ -142,4 +165,4 @@ class DynotableViewListener(sublime_plugin.ViewEventListener):
             self.waiting = True
             sublime.set_timeout_async(self.recover_async, _RECOVERY_WAIT_MS)
         elif step == "check":
-            view.run_command("lsp_check_applicable", {"session_name": LspDynotablePlugin.name})
+            _attach_async(view)
