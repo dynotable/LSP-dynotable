@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Callable, Mapping
+from typing import AbstractSet, Callable, Mapping
 import json
 import os
 
 
 def port_file_path(platform: str, env: Mapping[str, str], home: str) -> str:
     """The app's port file. `platform` is a `sublime.platform()` value: "osx", "windows" or "linux"."""
+    # `dynotable-cli` reads the port file from this directory when it is set, so the gate must read the same file.
+    custom = env.get("DYNOTABLE_USER_DATA_DIR")
+    if custom:
+        return os.path.join(custom, "lsp-port.json")
     if platform == "osx":
         return os.path.join(home, "Library", "Application Support", "DynoTable", "lsp-port.json")
     if platform == "windows":
@@ -79,9 +83,30 @@ def _pid_alive_windows(pid: int) -> bool:
         kernel32.CloseHandle(handle)
 
 
-def gate(first_start_pending: bool, app_running: bool, refused: bool) -> bool:
-    """May a server start now? Only the first start may launch a closed app."""
-    return first_start_pending or (app_running and not refused)
+def gate(
+    first_start_pending: bool, app_running: bool, refused_windows: AbstractSet[int], window_id: int | None
+) -> bool:
+    """
+    May a server start now in this window? Only the first start may launch a closed app.
+
+    A refusal closes the gate only in its own window: a bad `.dynotable.json` in one project must not stop the
+    healthy session of another window from taking new files.
+    """
+    return first_start_pending or (app_running and window_id not in refused_windows)
+
+
+def recovery_step(attached: bool, refused: bool, starting: bool, app_running: bool) -> str:
+    """
+    What the view listener does when a DynoTable view gets focus: "skip", "wait" (check again later) or "check".
+
+    While LSP starts a session in the window, a check would start a second one, and the first one would never be
+    used or stopped. So it waits until that start ends.
+    """
+    if attached or refused:
+        return "skip"
+    if starting:
+        return "wait"
+    return "check" if app_running else "skip"
 
 
 def start_command(base: list[str], first_start: bool) -> list[str]:

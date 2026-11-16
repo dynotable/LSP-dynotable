@@ -1,6 +1,6 @@
 import unittest
 
-from dynotable_gate import app_running, gate, latches_refusal, port_file_path, start_command
+from dynotable_gate import app_running, gate, latches_refusal, port_file_path, recovery_step, start_command
 
 PATH = "/home/u/.config/DynoTable/lsp-port.json"
 
@@ -31,17 +31,31 @@ class AppRunningTest(unittest.TestCase):
 
 class GateTest(unittest.TestCase):
     def test_first_start_may_launch_a_closed_app(self):
-        self.assertTrue(gate(first_start_pending=True, app_running=False, refused=False))
+        self.assertTrue(gate(first_start_pending=True, app_running=False, refused_windows=set(), window_id=1))
 
     def test_restart_after_a_quit_does_not_start(self):
-        self.assertFalse(gate(first_start_pending=False, app_running=False, refused=False))
+        self.assertFalse(gate(first_start_pending=False, app_running=False, refused_windows=set(), window_id=1))
 
     def test_app_up_starts(self):
-        self.assertTrue(gate(first_start_pending=False, app_running=True, refused=False))
+        self.assertTrue(gate(first_start_pending=False, app_running=True, refused_windows=set(), window_id=1))
 
-    def test_refusal_stops_crash_restarts(self):
-        # Without this, each refusal is a crash, and the fifth one shows a modal dialog.
-        self.assertFalse(gate(first_start_pending=False, app_running=True, refused=True))
+    def test_refusal_stops_crash_restarts_in_its_window_only(self):
+        # Without the latch, each refusal is a crash, and the fifth one shows a modal dialog.
+        self.assertFalse(gate(first_start_pending=False, app_running=True, refused_windows={2}, window_id=2))
+        # A bad `.dynotable.json` in window 2 must not stop window 1's session from taking new files.
+        self.assertTrue(gate(first_start_pending=False, app_running=True, refused_windows={2}, window_id=1))
+
+
+class RecoveryStepTest(unittest.TestCase):
+    def test_never_checks_while_a_session_starts(self):
+        # A check now starts a second session, and the first one never gets used or stopped.
+        self.assertEqual(recovery_step(attached=False, refused=False, starting=True, app_running=True), "wait")
+
+    def test_checks_when_the_app_is_back(self):
+        self.assertEqual(recovery_step(attached=False, refused=False, starting=False, app_running=True), "check")
+
+    def test_refused_window_waits_for_retry(self):
+        self.assertEqual(recovery_step(attached=False, refused=True, starting=True, app_running=True), "skip")
 
 
 class StartCommandTest(unittest.TestCase):
@@ -68,6 +82,20 @@ class PortFilePathTest(unittest.TestCase):
         self.assertEqual(
             port_file_path("linux", {"XDG_CONFIG_HOME": "/xdg"}, "/home/u"),
             "/xdg/DynoTable/lsp-port.json",
+        )
+
+    def test_user_data_dir_overrides_the_platform_path(self):
+        # dynotable-cli reads the port file from this directory, so the gate must read the same one.
+        self.assertEqual(
+            port_file_path("osx", {"DYNOTABLE_USER_DATA_DIR": "/data/dt"}, "/Users/u"),
+            "/data/dt/lsp-port.json",
+        )
+
+    def test_empty_user_data_dir_is_unset(self):
+        # The CLI tests it with `||`, so an empty value means the platform path.
+        self.assertEqual(
+            port_file_path("osx", {"DYNOTABLE_USER_DATA_DIR": ""}, "/Users/u"),
+            "/Users/u/Library/Application Support/DynoTable/lsp-port.json",
         )
 
 
