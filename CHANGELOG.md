@@ -7,3 +7,5 @@
   inlay hints from the DynoTable app. The server is `dynotable-cli` 0.1.1.
 - Run a statement from the Run lens or the Command Palette. The rows show in the "DynoTable
   Results" panel. Sort them, copy them as CSV, JSON or Markdown, or cancel a run.
+- SQL and PartiQL statements get the Run lens, and can get the Open in DynoTable lens. OpenSearch
+  files get no lenses.

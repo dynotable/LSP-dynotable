@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from .dynotable_gate import app_running, gate, latches_refusal, pid_alive, port_file_path, recovery_step, start_command
-from .dynotable_results import RUN_COMMAND, Run, RunEvent, csv_text, grid_text, json_text, markdown_text, pick_lens
-from .dynotable_results import run_step, sort_order, visible
+from .dynotable_results import RUN_COMMAND, Run, RunEvent, csv_text, grid_text, is_result, json_text, markdown_text
+from .dynotable_results import pick_lens, run_start, run_step, sort_order, visible
 from LSP.plugin import Error, IsApplicableContext, LspPlugin, LspTextCommand, Notification, OnPreStartContext, Promise
 from LSP.plugin import Request, command_handler, region_to_range, text_document_identifier
 from lsp_utils import NodeManager
 from pathlib import Path
 from sublime_lib import ResourcePath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 import os
 import shutil
 import sublime
@@ -99,7 +99,7 @@ class LspDynotablePlugin(LspPlugin):
             return Promise.resolve(None)
         if not isinstance(arguments[0].get("uri"), str):
             return Promise.resolve(None)
-        return _start_async(session, RunEvent("start-execute", _Token(session)), arguments[0], None, None)
+        return _start_async(_Token(session), arguments[0], None, None)
 
     def on_session_end_async(self, exit_code: int | None, exception: Exception | None) -> None:
         # LSP drops the handlers of the requests in flight without calling them, so the run ends here.
@@ -117,6 +117,7 @@ _PANEL = "DynoTable Results"
 _RUNNING = "A statement is running. Wait for it, or run DynoTable: Cancel Run."
 _NO_LENS = "No statement at the cursor. A file with a syntax error has no runnable statements."
 _NO_RESULT = "There are no results. Run a statement first."
+_BAD_ANSWER = "DynoTable sent an answer that LSP-dynotable cannot read. Update LSP-dynotable and DynoTable."
 _COPY = {"csv": ("CSV", csv_text), "json": ("JSON", json_text), "markdown": ("Markdown", markdown_text)}
 
 # Per window id: the active run, and the last result, which Sort and Copy use.
@@ -145,15 +146,22 @@ def _step(window_id: int, event: RunEvent) -> str | None:
 def _write(window: sublime.Window, text: str) -> None:
     if not window.is_valid():
         return
-    # `create_output_panel` empties the panel when it exists.
     panel = window.create_output_panel(_PANEL)
     settings = panel.settings()
     settings.set("word_wrap", False)
     settings.set("gutter", False)
     panel.assign_syntax(f"Packages/{LspDynotablePlugin.name}/DynoTable Results.sublime-syntax")
-    panel.set_read_only(True)
-    panel.run_command("append", {"characters": text, "force": True})
+    panel.run_command("dynotable_replace_panel", {"characters": text})
     window.run_command("show_panel", {"panel": f"output.{_PANEL}"})
+
+
+class DynotableReplacePanelCommand(sublime_plugin.TextCommand):
+    """Replaces the whole text of the read-only results panel, so a second run or a sort does not add to it."""
+
+    def run(self, edit: sublime.Edit, characters: str = "") -> None:
+        self.view.set_read_only(False)
+        self.view.replace(edit, sublime.Region(0, self.view.size()), characters)
+        self.view.set_read_only(True)
 
 
 def _failure(message: str) -> str:
@@ -165,54 +173,49 @@ def _error_message(error: Error) -> str:
     return str(error.args[0]) if error.args else ""
 
 
-def _purge_async(session: Session, uri: str, view: sublime.View | None) -> None:
+def _purge_async(session: Session, uri: str, view: sublime.View) -> None:
     """Sends the edits that LSP holds back (it debounces `didChange`), so that the run sees the text on screen."""
     try:
         buffer = session.get_session_buffer_for_uri_async(uri)
         # Not on `SessionBufferProtocol`: a later LSP release can remove it. Then a run can miss the last edit.
         purge = getattr(buffer, "purge_changes_async", None)
         if buffer and purge:
-            purge(view or buffer.get_view_in_group())
+            purge(view)
         elif buffer:
             print("LSP-dynotable: SessionBuffer.purge_changes_async is gone; a run can miss the last edit")
     except Exception as ex:
         print(f"LSP-dynotable: a run can miss the last edit: {ex!r}")
 
 
-def _start_async(
-    session: Session, event: RunEvent, args: dict[str, Any], line: int | None, view: sublime.View | None
-) -> Promise[None]:
+def _start_async(token: _Token, args: dict[str, Any], line: int | None, view: sublime.View | None) -> Promise[None]:
     """
-    Starts a run: `executeCommand` with `args`, or first `codeLens` to find the statement on `line` (0-based).
-
-    The promise resolves `None` when the run ends.
+    Starts a run: `executeCommand` with `args`, or, when `line` (0-based) is given, first `codeLens` to find the
+    statement on it. `view` is `None` for a lens click. The promise resolves `None` when the run ends.
     """
-    token = event.token
+    session = token.session()
     window = token.window
     # A session that ends drops its requests without an answer, so a run on it would hold the guard until Cancel.
-    if session.exiting:
+    if session is None or session.exiting:
         return Promise.resolve(None)
-    action = _step(window.id(), event)
-    if action == "refuse":
+    if _step(window.id(), RunEvent("start-execute" if line is None else "start-lens", token)) == "refuse":
         window.status_message(_RUNNING)
         return Promise.resolve(None)
-    _purge_async(session, args["uri"], view)
-    if action == "send-lens":
-        return _send_lens_async(session, token, args["uri"], line or 0)
+    _results.pop(window.id(), None)
+    # Not for a lens click: its range is for the text that the server has, and a purge first can shift the text
+    # under that range.
+    if view is not None:
+        _purge_async(session, args["uri"], view)
+    if line is not None:
+        return _send_lens_async(session, token, args["uri"], line)
     return _send_execute_async(session, token, args)
 
 
 def _send_lens_async(session: Session, token: _Token, uri: str, line: int) -> Promise[None]:
-    try:
-        promise = session.send_request_task(Request("textDocument/codeLens", {"textDocument": {"uri": uri}}))
-    except Exception as ex:
-        if _step(token.window.id(), RunEvent("lens-error", token)) == "fail":
-            _write(token.window, _failure(str(ex)))
-        return Promise.resolve(None)
-    return promise.then(lambda answer: _on_lenses_async(token, line, answer))
+    promise = session.send_request_task(Request("textDocument/codeLens", {"textDocument": {"uri": uri}}))
+    return promise.then(lambda answer: _on_lenses_async(session, token, line, answer))
 
 
-def _on_lenses_async(token: _Token, line: int, answer: Any) -> Promise[None] | None:
+def _on_lenses_async(session: Session, token: _Token, line: int, answer: Any) -> Promise[None] | None:
     window_id = token.window.id()
     if isinstance(answer, Error):
         if _step(window_id, RunEvent("lens-error", token)) == "fail":
@@ -225,21 +228,12 @@ def _on_lenses_async(token: _Token, line: int, answer: Any) -> Promise[None] | N
         return None
     if _step(window_id, RunEvent("lens-found", token)) != "send-execute":
         return None
-    session = token.session()
-    if session is None:
-        _step(window_id, RunEvent("error", token))
-        return None
     return _send_execute_async(session, token, lens["command"]["arguments"][0])
 
 
 def _send_execute_async(session: Session, token: _Token, args: dict[str, Any]) -> Promise[None]:
     request = Request("workspace/executeCommand", {"command": RUN_COMMAND, "arguments": [args]})
-    try:
-        promise, request_id = session.send_request_task_2(request)
-    except Exception as ex:
-        if _step(token.window.id(), RunEvent("error", token)) == "fail":
-            _write(token.window, _failure(str(ex)))
-        return Promise.resolve(None)
+    promise, request_id = session.send_request_task_2(request)
     _step(token.window.id(), RunEvent("sent", token, request_id))
     return promise.then(lambda answer: _on_answer_async(token, answer))
 
@@ -250,9 +244,13 @@ def _on_answer_async(token: _Token, answer: Any) -> None:
         if _step(window_id, RunEvent("error", token)) == "fail":
             _write(token.window, _failure(_error_message(answer)))
         return
-    if _step(window_id, RunEvent("answer", token)) == "render":
-        _results[window_id] = answer
-        _write(token.window, grid_text(answer, list(range(len(answer["rows"])))))
+    if _step(window_id, RunEvent("answer", token)) != "render":
+        return
+    if not is_result(answer):
+        _write(token.window, _failure(_BAD_ANSWER))
+        return
+    _results[window_id] = answer
+    _write(token.window, grid_text(answer, list(range(len(answer["rows"])))))
 
 
 def _cancel_async(window: sublime.Window) -> None:
@@ -261,7 +259,7 @@ def _cancel_async(window: sublime.Window) -> None:
     action = _step(window_id, RunEvent("cancel"))
     if action == "cancel-request" and state is not None:
         # Not `cancel_request_async`: it ends the request here and drops the answer of the app, which says why.
-        session = state.token.session()
+        session = cast(_Token, state.token).session()
         if session:
             session.send_notification(Notification("$/cancelRequest", {"id": state.request_id}))
     elif action == "cancelled":
@@ -306,18 +304,16 @@ class DynotableRunCommand(LspTextCommand):
         if session is None:
             return
         view = self.view
-        uri = text_document_identifier(view)["uri"]
         region = view.sel()[0] if len(view.sel()) else sublime.Region(0)
         syntax = view.syntax()
-        line = None
-        if not region.empty():
-            kind, args = "start-execute", {"uri": uri, "range": region_to_range(view, region)}
-        elif syntax and syntax.scope == "source.opensearch":
-            kind, args = "start-execute", {"uri": uri}
-        else:
-            kind, args, line = "start-lens", {"uri": uri}, view.rowcol(region.b)[0]
+        args, line = run_start(
+            text_document_identifier(view)["uri"],
+            None if region.empty() else region_to_range(view, region),
+            bool(syntax and syntax.scope == "source.opensearch"),
+            view.rowcol(region.b)[0],
+        )
         token = _Token(session)
-        sublime.set_timeout_async(lambda: _start_async(session, RunEvent(kind, token), args, line, view))
+        sublime.set_timeout_async(lambda: _start_async(token, args, line, view))
 
 
 class DynotableSortResultsCommand(sublime_plugin.WindowCommand):
@@ -363,6 +359,18 @@ class DynotableCancelRunCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
         window = self.window
         sublime.set_timeout_async(lambda: _cancel_async(window))
+
+
+def _forget_async(window_id: int) -> None:
+    _runs.pop(window_id, None)
+    _results.pop(window_id, None)
+
+
+class DynotableWindowListener(sublime_plugin.EventListener):
+    def on_pre_close_window(self, window: sublime.Window) -> None:
+        # `_runs` changes on the async thread only (see `_step`).
+        window_id = window.id()
+        sublime.set_timeout_async(lambda: _forget_async(window_id))
 
 
 class DynotableViewListener(sublime_plugin.ViewEventListener):

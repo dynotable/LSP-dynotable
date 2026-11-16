@@ -29,7 +29,9 @@ The package does not attach to plain `.sql` or `.json` files.
 ## Run a statement
 
 Click the **Run** lens above a statement. The rows show in the "DynoTable Results" panel at the
-bottom of the window, with a summary line under the table.
+bottom of the window, with a summary line under the table. SQL and PartiQL statements can also get
+an **Open in DynoTable** lens. It opens the statement's table in the app. OpenSearch files get no
+lenses: use "DynoTable: Run Statement".
 
 You can also use the Command Palette:
 
@@ -37,14 +39,16 @@ You can also use the Command Palette:
   cursor. In an OpenSearch file, it runs the whole file. Use it when the lens is cut off at the end
   of a long line.
 - "DynoTable: Sort Results" sorts the rows in the panel by a column you pick, ascending or
-  descending.
+  descending. Text sorts by code point, so a few rare characters can sort in another order than in
+  VS Code.
 - "DynoTable: Copy Results as CSV", "… as JSON" and "… as Markdown" copy all rows in query order,
   also after a sort.
 - "DynoTable: Cancel Run" stops the run. The panel says that the run was cancelled.
 
-One statement runs at a time in a window. Unsaved edits run as you see them. A file with a syntax
-error has no runnable statements. A PartiQL write does not run from the editor: make writes in
-DynoTable.
+One statement runs at a time in a window. "DynoTable: Run Statement" runs unsaved edits as you see
+them. A lens that you click right after an edit can run the text from before the edit: use the
+command then. A file with a syntax error has no runnable statements. A PartiQL write does not run
+from the editor: make writes in DynoTable.
 
 The package has no key binding for Run, because Cmd+Enter and Ctrl+Enter are core keys. To add one,
 run "Preferences: Key Bindings" and add:
@@ -105,8 +109,12 @@ Fix the cause, then run "DynoTable: Retry Connection" from the Command Palette i
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests
+uv run -p 3.8 python -m unittest discover -s tests
+npx --yes pyright@1.1.414
 ```
+
+Python 3.8 is the floor (`.python-version`). CI runs the unit tests on Python 3.8 and 3.14, and
+the type check (`.github/workflows/tests.yml`).
 
 The syntax tests run in CI (`.github/workflows/syntax.yml`). To run them locally, put this package
 at `Data/Packages/LSP-dynotable` of the Linux `st_syntax_tests` build 4215, next to the

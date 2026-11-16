@@ -5,11 +5,13 @@ from dynotable_results import (
     RunEvent,
     csv_text,
     grid_text,
+    is_result,
     js_json,
     js_number,
     json_text,
     markdown_text,
     pick_lens,
+    run_start,
     run_step,
     sort_order,
     summary,
@@ -113,6 +115,15 @@ class JsNumberTest(unittest.TestCase):
     def test_negative_zero(self):
         self.assertEqual(js_number(-0.0), "0")
 
+    def test_fraction_with_a_whole_part(self):
+        self.assertEqual(js_number(1.5), "1.5")
+
+    def test_negative(self):
+        self.assertEqual(js_number(-5), "-5")
+
+    def test_small_exponent_with_a_fraction(self):
+        self.assertEqual(js_number(1.5e-7), "1.5e-7")
+
 
 class JsJsonTest(unittest.TestCase):
     def test_numbers_at_depth_and_no_spaces(self):
@@ -120,10 +131,6 @@ class JsJsonTest(unittest.TestCase):
 
     def test_non_ascii_is_kept(self):
         self.assertEqual(js_json({"name": "é"}), '{"name":"é"}')
-
-    def test_integer_like_keys_come_first(self):
-        # JavaScript moves array-index keys first when it parses an object; `01` is not one.
-        self.assertEqual(js_json({"b": 1, "10": 2, "2": 3, "01": 4}), '{"2":3,"10":2,"b":1,"01":4}')
 
 
 class GridTextTest(unittest.TestCase):
@@ -300,6 +307,50 @@ class PickLensTest(unittest.TestCase):
         bare = {"range": {}, "command": {"title": "Run", "command": "dynotable.runStatement"}}
         self.assertIsNone(pick_lens([bare], 0))
 
+    def test_lens_whose_argument_has_no_range_is_skipped(self):
+        # With no range, the app runs the whole document: Run at the cursor must never do that.
+        whole = lens((0, 0), (0, 10))
+        del whole["command"]["arguments"][0]["range"]
+        self.assertIsNone(pick_lens([whole], 0))
+
+    def test_malformed_range_is_skipped_and_the_next_lens_is_picked(self):
+        broken, good = lens((0, 0), (0, 10)), lens((0, 0), (0, 10))
+        broken["command"]["arguments"][0]["range"]["end"] = None
+        self.assertIs(pick_lens([broken, good], 0), good)
+
+
+class RunStartTest(unittest.TestCase):
+    uri = "file:///q.dtsql"
+    selection = {"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 9}}
+
+    def test_selection_runs_as_it_is(self):
+        self.assertEqual(
+            run_start(self.uri, self.selection, False, 4), ({"uri": "file:///q.dtsql", "range": self.selection}, None)
+        )
+
+    def test_opensearch_without_a_selection_runs_the_whole_document(self):
+        self.assertEqual(run_start(self.uri, None, True, 4), ({"uri": "file:///q.dtsql"}, None))
+
+    def test_no_selection_finds_the_statement_on_the_cursor_row(self):
+        self.assertEqual(run_start(self.uri, None, False, 4), ({"uri": "file:///q.dtsql"}, 4))
+
+
+class IsResultTest(unittest.TestCase):
+    def test_run_result(self):
+        self.assertTrue(is_result(result(columns=["a"], rows=[{"a": 1}], returnedRows=1, itemsScanned=3)))
+
+    def test_malformed_answers(self):
+        cases = [
+            ("null", None),
+            ("no rows", {key: value for key, value in result().items() if key != "rows"}),
+            ("a column that is not a string", result(columns=[1])),
+            ("a row that is not an object", result(columns=["a"], rows=[["x"]])),
+            ("a number field that is text", result(elapsedMs="5")),
+        ]
+        for name, answer in cases:
+            with self.subTest(name):
+                self.assertFalse(is_result(answer))
+
 
 class RunStepTest(unittest.TestCase):
     def test_cancel_then_a_new_run_ignores_the_old_answer(self):
@@ -357,6 +408,12 @@ class RunStepTest(unittest.TestCase):
         a = object()
         state, _ = run_step(None, RunEvent("start-execute", a))
         self.assertEqual(run_step(state, RunEvent("answer", a)), (None, "render"))
+
+    def test_cancel_before_execute_was_sent_clears_and_sends_no_cancel_request(self):
+        # There is no request id yet, so a `$/cancelRequest` would have no id.
+        a = object()
+        state, _ = run_step(None, RunEvent("start-execute", a))
+        self.assertEqual(run_step(state, RunEvent("cancel")), (None, "cancelled"))
 
     def test_execute_error_releases_the_guard(self):
         a = object()

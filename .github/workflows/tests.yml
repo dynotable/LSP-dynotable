@@ -19,3 +19,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v10.3.3
       - run: uv run -p ${{ matrix.python }} python -m unittest discover -s tests
+
+  type_check:
+    # Catches a wrong argument count in the plugin glue, which the unit tests do not load.
+    name: Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx --yes pyright@1.1.414

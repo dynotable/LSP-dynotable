@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 import json
-import math
 import re
 
 Row = Dict[str, Any]
@@ -17,7 +16,6 @@ _CONTROL = re.compile("[\x00-\x1f\x7f-\x9f]")
 _NUMBER = re.compile(r"-?\d+(\.\d+)?([eE][+-]?\d+)?", re.ASCII)
 _FORMULA_START = "=+-@\t\r\n"
 _LINE_BREAK = re.compile(r"\r\n|\r|\n")
-_ARRAY_INDEX_LIMIT = 2**32 - 1
 
 
 def visible(text: str) -> str:
@@ -26,15 +24,12 @@ def visible(text: str) -> str:
 
 
 def js_number(value: float) -> str:
-    """JavaScript's `String(n)`. JSON gives VS Code a double, so an int is read as one too."""
-    try:
-        x = float(value)
-    except OverflowError:
-        x = math.inf if value > 0 else -math.inf
-    if math.isnan(x):
-        return "NaN"
-    if math.isinf(x):
-        return "Infinity" if x > 0 else "-Infinity"
+    """
+    JavaScript's `String(n)`. JSON gives VS Code a double, so an int is read as one too.
+
+    The app writes its answer with `JSON.stringify`, so no value is NaN, Infinity or out of the double range.
+    """
+    x = float(value)
     if x == 0:
         return "0"
     sign = "-" if x < 0 else ""
@@ -62,18 +57,11 @@ def _string(text: str) -> str:
     return json.dumps(text, ensure_ascii=False)
 
 
-def _is_array_index(key: str) -> bool:
-    return key.isdigit() and key.isascii() and (key == "0" or key[0] != "0") and int(key) < _ARRAY_INDEX_LIMIT
-
-
-def _js_keys(value: Dict[str, Any]) -> List[str]:
-    """The key order of a JavaScript object parsed from JSON: array-index keys ascending first, then the rest."""
-    indices = sorted((key for key in value if _is_array_index(key)), key=int)
-    return indices + [key for key in value if not _is_array_index(key)]
-
-
 def js_json(value: Any) -> str:
-    """JavaScript's `JSON.stringify(value)`."""
+    """
+    JavaScript's `JSON.stringify(value)`. The keys keep their order: the app's `JSON.stringify` already put them in
+    the order of a JavaScript object.
+    """
     if value is None:
         return "null"
     if isinstance(value, bool):
@@ -85,7 +73,7 @@ def js_json(value: Any) -> str:
     if isinstance(value, list):
         return "[" + ",".join(js_json(item) for item in value) + "]"
     if isinstance(value, dict):
-        return "{" + ",".join(_string(key) + ":" + js_json(value[key]) for key in _js_keys(value)) + "}"
+        return "{" + ",".join(_string(key) + ":" + js_json(value[key]) for key in value) + "}"
     raise TypeError("Not a JSON value: {!r}".format(value))
 
 
@@ -97,7 +85,7 @@ def _js_pretty(value: Any, indent: str) -> str:
         return "[\n" + items + "\n" + indent + "]"
     if isinstance(value, dict) and value:
         members = ",\n".join(
-            inner + _string(key) + ": " + _js_pretty(value[key], inner) for key in _js_keys(value)
+            inner + _string(key) + ": " + _js_pretty(value[key], inner) for key in value
         )
         return "{\n" + members + "\n" + indent + "}"
     return js_json(value)
@@ -246,28 +234,67 @@ def markdown_text(result: Result) -> str:
     return "\n".join(lines)
 
 
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _statement_lines(lens: Any) -> Optional[Tuple[int, int]]:
+    """The first and last line of a Run lens's statement, or `None` for another lens or a malformed one."""
+    try:
+        command = lens["command"]
+        if command["command"] != RUN_COMMAND:
+            return None
+        statement = command["arguments"][0]["range"]
+        start, end, character = statement["start"]["line"], statement["end"]["line"], statement["end"]["character"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    if not all(isinstance(value, int) and not isinstance(value, bool) for value in (start, end, character)):
+        return None
+    # An end at character 0 of a later line does not hold that line.
+    return start, (end - 1 if character == 0 and end > start else end)
+
+
 def pick_lens(lenses: List[Any], line: int) -> Optional[Dict[str, Any]]:
     """
-    The first Run lens whose statement holds `line` (0-based).
-
-    The statement range is in the lens's argument; the lens's own range is only an anchor. An end at character 0
-    of a later line does not hold that line.
+    The first Run lens whose statement holds `line` (0-based). The statement range is in the lens's argument; the
+    lens's own range is only an anchor.
     """
     for lens in lenses:
-        command = lens.get("command") if isinstance(lens, dict) else None
-        if not isinstance(command, dict) or command.get("command") != RUN_COMMAND:
-            continue
-        arguments = command.get("arguments")
-        if not isinstance(arguments, list) or not arguments or not isinstance(arguments[0], dict):
-            continue
-        statement = arguments[0].get("range")
-        if not isinstance(statement, dict):
-            continue
-        start, end = statement["start"], statement["end"]
-        last = end["line"] - 1 if end["character"] == 0 and end["line"] > start["line"] else end["line"]
-        if start["line"] <= line <= last:
+        lines = _statement_lines(lens)
+        if lines is not None and lines[0] <= line <= lines[1]:
             return lens
     return None
+
+
+def run_start(
+    uri: str, selection: Optional[Dict[str, Any]], opensearch: bool, row: int
+) -> Tuple[Result, Optional[int]]:
+    """
+    What "DynoTable: Run Statement" runs: the `executeCommand` argument, and the cursor row (0-based) when the
+    statement must first be found with `codeLens`, else `None`. `selection` is the selected range, or `None`.
+    """
+    if selection is not None:
+        return {"uri": uri, "range": selection}, None
+    if opensearch:
+        return {"uri": uri}, None
+    return {"uri": uri}, row
+
+
+def is_result(answer: Any) -> bool:
+    """Whether the `executeCommand` answer has the fields that the panel, Sort and Copy read."""
+    if not isinstance(answer, dict):
+        return False
+    columns, rows = answer.get("columns"), answer.get("rows")
+    return (
+        isinstance(columns, list)
+        and all(isinstance(column, str) for column in columns)
+        and isinstance(rows, list)
+        and all(isinstance(row, dict) for row in rows)
+        and all(_is_number(answer.get(key)) for key in ("returnedRows", "elapsedMs", "effectiveRowCap"))
+        and (answer.get("totalRows") is None or _is_number(answer.get("totalRows")))
+        and (answer.get("itemsScanned") is None or _is_number(answer.get("itemsScanned")))
+        and isinstance(answer.get("truncated"), bool)
+    )
 
 
 class Run(NamedTuple):
