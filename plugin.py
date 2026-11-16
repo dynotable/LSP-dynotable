@@ -160,6 +160,10 @@ class DynotableReplacePanelCommand(sublime_plugin.TextCommand):
         self.view.set_read_only(False)
         self.view.replace(edit, sublime.Region(0, self.view.size()), characters)
         self.view.set_read_only(True)
+        # `replace` leaves the new text selected, and a selection shows the whitespace markers in every cell.
+        self.view.sel().clear()
+        self.view.sel().add(sublime.Region(0))
+        self.view.show(0)
 
 
 def _failure(message: str) -> str:
