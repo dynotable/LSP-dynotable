@@ -46,9 +46,9 @@ You can also use the Command Palette:
 - "DynoTable: Cancel Run" stops the run. The panel says that the run was cancelled.
 
 One statement runs at a time in a window. "DynoTable: Run Statement" runs unsaved edits as you see
-them. A lens that you click right after an edit can run the text from before the edit: use the
-command then. A file with a syntax error has no runnable statements. A PartiQL write does not run
-from the editor: make writes in DynoTable.
+them. A lens that you click right after an edit can run the wrong text: use the command then. A
+file with a syntax error has no runnable statements. A PartiQL write does not run from the editor:
+make writes in DynoTable.
 
 The package has no key binding for Run, because Cmd+Enter and Ctrl+Enter are core keys. To add one,
 run "Preferences: Key Bindings" and add:

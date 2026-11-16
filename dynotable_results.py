@@ -291,7 +291,8 @@ def is_result(answer: Any) -> bool:
         and isinstance(rows, list)
         and all(isinstance(row, dict) for row in rows)
         and all(_is_number(answer.get(key)) for key in ("returnedRows", "elapsedMs", "effectiveRowCap"))
-        and (answer.get("totalRows") is None or _is_number(answer.get("totalRows")))
+        and "totalRows" in answer
+        and (answer["totalRows"] is None or _is_number(answer["totalRows"]))
         and (answer.get("itemsScanned") is None or _is_number(answer.get("itemsScanned")))
         and isinstance(answer.get("truncated"), bool)
     )

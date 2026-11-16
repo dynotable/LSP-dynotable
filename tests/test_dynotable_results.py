@@ -343,6 +343,8 @@ class IsResultTest(unittest.TestCase):
         cases = [
             ("null", None),
             ("no rows", {key: value for key, value in result().items() if key != "rows"}),
+            # Null is an unknown total, but the key is required: the summary reads it.
+            ("no totalRows", {key: value for key, value in result().items() if key != "totalRows"}),
             ("a column that is not a string", result(columns=[1])),
             ("a row that is not an object", result(columns=["a"], rows=[["x"]])),
             ("a number field that is text", result(elapsedMs="5")),
