@@ -26,10 +26,40 @@ DynoTable gives the language features for your DynoTable SQL, PartiQL and OpenSe
 
 The package does not attach to plain `.sql` or `.json` files.
 
-## What does not work
+## Run a statement
 
-There is no results grid. Run your queries in the DynoTable app or in the DynoTable extension for
-VS Code.
+Click the **Run** lens above a statement. The rows show in the "DynoTable Results" panel at the
+bottom of the window, with a summary line under the table.
+
+You can also use the Command Palette:
+
+- "DynoTable: Run Statement" runs the selection. With no selection, it runs the statement at the
+  cursor. In an OpenSearch file, it runs the whole file. Use it when the lens is cut off at the end
+  of a long line.
+- "DynoTable: Sort Results" sorts the rows in the panel by a column you pick, ascending or
+  descending.
+- "DynoTable: Copy Results as CSV", "… as JSON" and "… as Markdown" copy all rows in query order,
+  also after a sort.
+- "DynoTable: Cancel Run" stops the run. The panel says that the run was cancelled.
+
+One statement runs at a time in a window. Unsaved edits run as you see them. A file with a syntax
+error has no runnable statements. A PartiQL write does not run from the editor: make writes in
+DynoTable.
+
+The package has no key binding for Run, because Cmd+Enter and Ctrl+Enter are core keys. To add one,
+run "Preferences: Key Bindings" and add:
+
+```json
+{
+	"keys": ["super+enter"],
+	"command": "dynotable_run",
+	"context": [
+		{"key": "selector", "operand": "source.sql.dynotable | source.partiql | source.opensearch"}
+	]
+}
+```
+
+Use `ctrl+enter` on Linux and Windows. The `context` keeps the core key in all other files.
 
 ## Requirements
 
