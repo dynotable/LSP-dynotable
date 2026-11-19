@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4 — 2026-11-19
+
+- When DynoTable is not running, the status bar says so when a DynoTable file opens or gets
+  focus, and after "DynoTable: Retry Connection".
+
 ## 1.0.3 — 2026-11-19
 
 - Opening a DynoTable file no longer starts the DynoTable app. Set `"launch_app": true` to get the

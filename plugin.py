@@ -33,6 +33,7 @@ _PANEL = "DynoTable Results"
 _RUNNING = "A statement is running. Wait for it, or run DynoTable: Cancel Run."
 _NO_LENS = "No statement at the cursor. A file with a syntax error has no runnable statements."
 _NO_RESULT = "There are no results. Run a statement first."
+_APP_CLOSED = "DynoTable is not running. Start DynoTable, then switch back to this file."
 _BAD_ANSWER = "DynoTable sent an answer that LSP-dynotable cannot read. Update LSP-dynotable and DynoTable."
 _SYNTAXES = frozenset(
     f"Packages/LSP-dynotable/{name}.sublime-syntax" for name in ("DynoTable SQL", "PartiQL", "OpenSearch")
@@ -304,6 +305,8 @@ class DynotableRetryCommand(sublime_plugin.WindowCommand):
 
     def run(self) -> None:
         LspDynotablePlugin.refused_windows.discard(self.window.id())
+        if not _app_running():
+            self.window.status_message(_APP_CLOSED)
         if view := self.window.active_view():
             sublime.set_timeout_async(lambda: _attach_async(view))
 
@@ -400,6 +403,8 @@ class DynotableViewListener(sublime_plugin.ViewEventListener):
     def __init__(self, view: sublime.View) -> None:
         super().__init__(view)
         self.waiting = False
+        # ST creates the listener when the file gets its syntax, which is after the file was activated.
+        sublime.set_timeout_async(self.on_activated_async)
 
     def on_activated_async(self) -> None:
         if not self.waiting:
@@ -429,3 +434,6 @@ class DynotableViewListener(sublime_plugin.ViewEventListener):
             sublime.set_timeout_async(self.recover_async, _RECOVERY_WAIT_MS)
         elif step == "check":
             _attach_async(view)
+        elif not attached and not refused:
+            # "skip" with no session and no refusal: the app is not running.
+            window.status_message(_APP_CLOSED)

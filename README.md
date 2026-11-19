@@ -76,7 +76,7 @@ Use `ctrl+enter` on Linux and Windows. The `context` keeps the core key in all o
   `PATH`, or with a Node.js that it downloads.
 
 Start DynoTable before you open a DynoTable file. If DynoTable is not running, the file gets no
-language features: start DynoTable, then switch to the file. To let the package start DynoTable
+language features, and the status bar says so: start DynoTable, then switch to the file. To let the package start DynoTable
 with no window instead, set `"launch_app": true` (Preferences → Package Settings →
 LSP-dynotable).
 
