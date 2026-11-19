@@ -9,7 +9,14 @@
 					"$id": "sublime://settings/LSP-dynotable",
 					"definitions": {
 						"PluginConfig": {
-							"type": "object"
+							"type": "object",
+							"properties": {
+								"launch_app": {
+									"type": "boolean",
+									"default": false,
+									"markdownDescription": "When DynoTable is not running, the first start of the language server starts it with no window."
+								}
+							}
 						}
 					},
 					"allOf": [

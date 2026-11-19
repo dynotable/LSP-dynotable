@@ -2,5 +2,8 @@
 	// The DynoTable app gives the language features. With `dynotable-lsp` on your PATH, the package runs it;
 	// otherwise it runs the `dynotable-cli` version that this package pins.
 	"command": ["${node_bin}", "${server_path}"],
+	// When DynoTable is not running, the first start of the language server starts it with no window.
+	// Off by default: then start DynoTable yourself, and switch to a DynoTable file.
+	"launch_app": false,
 	"selector": "source.sql.dynotable | source.partiql | source.opensearch"
 }

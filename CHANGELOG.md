@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3 — 2026-11-19
+
+- Opening a DynoTable file no longer starts the DynoTable app. Set `"launch_app": true` to get the
+  old behaviour.
+- The view listener runs only for the package's syntaxes.
+- The published package leaves out the tests and the CI and lint files.
+
 ## 1.0.2 — 2026-11-16
 
 - The helper modules moved into the `dynotable` subpackage, so Sublime Text does not load them as separate plugins.

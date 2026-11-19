@@ -30,20 +30,23 @@ class AppRunningTest(unittest.TestCase):
 
 
 class GateTest(unittest.TestCase):
-    def test_first_start_may_launch_a_closed_app(self):
-        self.assertTrue(gate(first_start_pending=True, app_running=False, refused_windows=set(), window_id=1))
+    def test_first_start_may_launch_a_closed_app_when_opted_in(self):
+        self.assertTrue(gate(True, launch_app=True, app_running=False, refused_windows=set(), window_id=1))
+
+    def test_opening_a_file_does_not_launch_the_app_by_default(self):
+        self.assertFalse(gate(True, launch_app=False, app_running=False, refused_windows=set(), window_id=1))
 
     def test_restart_after_a_quit_does_not_start(self):
-        self.assertFalse(gate(first_start_pending=False, app_running=False, refused_windows=set(), window_id=1))
+        self.assertFalse(gate(False, launch_app=True, app_running=False, refused_windows=set(), window_id=1))
 
     def test_app_up_starts(self):
-        self.assertTrue(gate(first_start_pending=False, app_running=True, refused_windows=set(), window_id=1))
+        self.assertTrue(gate(False, launch_app=False, app_running=True, refused_windows=set(), window_id=1))
 
     def test_refusal_stops_crash_restarts_in_its_window_only(self):
         # Without the latch, each refusal is a crash, and the fifth one shows a modal dialog.
-        self.assertFalse(gate(first_start_pending=False, app_running=True, refused_windows={2}, window_id=2))
+        self.assertFalse(gate(False, launch_app=False, app_running=True, refused_windows={2}, window_id=2))
         # A bad `.dynotable.json` in window 2 must not stop window 1's session from taking new files.
-        self.assertTrue(gate(first_start_pending=False, app_running=True, refused_windows={2}, window_id=1))
+        self.assertTrue(gate(False, launch_app=False, app_running=True, refused_windows={2}, window_id=1))
 
 
 class RecoveryStepTest(unittest.TestCase):
@@ -59,10 +62,10 @@ class RecoveryStepTest(unittest.TestCase):
 
 
 class StartCommandTest(unittest.TestCase):
-    def test_first_start_may_launch(self):
+    def test_a_start_that_may_launch_has_no_flag(self):
         self.assertEqual(start_command(["/bin/dynotable-lsp"], True), ["/bin/dynotable-lsp"])
 
-    def test_later_start_adds_exactly_one_no_launch(self):
+    def test_other_starts_add_exactly_one_no_launch(self):
         base = ["node", "/s/dynotable-lsp.mjs"]
         self.assertEqual(start_command(base, False), ["node", "/s/dynotable-lsp.mjs", "--no-launch"])
         self.assertEqual(start_command(base, False), ["node", "/s/dynotable-lsp.mjs", "--no-launch"])

@@ -75,8 +75,10 @@ Use `ctrl+enter` on Linux and Windows. The `context` keeps the core key in all o
   package installs the `dynotable-cli` version that it pins. It runs it with Node.js from your
   `PATH`, or with a Node.js that it downloads.
 
-When DynoTable is not running, the first start of the language server starts DynoTable with no
-window.
+Start DynoTable before you open a DynoTable file. If DynoTable is not running, the file gets no
+language features: start DynoTable, then switch to the file. To let the package start DynoTable
+with no window instead, set `"launch_app": true` (Preferences → Package Settings →
+LSP-dynotable).
 
 ## Pick a profile
 

@@ -16,7 +16,7 @@ import sublime_plugin
 import weakref
 
 if TYPE_CHECKING:
-    from LSP.plugin import Session
+    from LSP.plugin import ClientConfig, Session
     from weakref import ref
 
 try:
@@ -34,6 +34,9 @@ _RUNNING = "A statement is running. Wait for it, or run DynoTable: Cancel Run."
 _NO_LENS = "No statement at the cursor. A file with a syntax error has no runnable statements."
 _NO_RESULT = "There are no results. Run a statement first."
 _BAD_ANSWER = "DynoTable sent an answer that LSP-dynotable cannot read. Update LSP-dynotable and DynoTable."
+_SYNTAXES = frozenset(
+    f"Packages/LSP-dynotable/{name}.sublime-syntax" for name in ("DynoTable SQL", "PartiQL", "OpenSearch")
+)
 _COPY = {"csv": ("CSV", csv_text), "json": ("JSON", json_text), "markdown": ("Markdown", markdown_text)}
 
 
@@ -48,6 +51,11 @@ def plugin_unloaded() -> None:
 def _read(path: str) -> str:
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+def _launch_app(configuration: ClientConfig) -> bool:
+    # A key that LSP does not know: `root_settings` has it with the project overrides applied.
+    return configuration.root_settings.get("launch_app") is True
 
 
 def _app_running() -> bool:
@@ -71,15 +79,17 @@ class LspDynotablePlugin(LspPlugin):
         if not super().is_applicable_async(context):
             return False
         window = context.view.window()
-        return gate(cls.first_start_pending, _app_running(), cls.refused_windows, window.id() if window else None)
+        window_id = window.id() if window else None
+        launch = _launch_app(context.configuration)
+        return gate(cls.first_start_pending, launch, _app_running(), cls.refused_windows, window_id)
 
     @classmethod
     def on_pre_start_async(cls, context: OnPreStartContext) -> None:
-        first = cls.first_start_pending
+        may_launch = cls.first_start_pending and _launch_app(context.configuration)
         cls.first_start_pending = False
         binary = shutil.which("dynotable-lsp")
         if binary:
-            context.configuration.command = start_command([binary], first)
+            context.configuration.command = start_command([binary], may_launch)
             return
         NodeManager.on_pre_start_async(
             context,
@@ -88,7 +98,7 @@ class LspDynotablePlugin(LspPlugin):
             Path("node_modules", "dynotable-cli", "bin", "dynotable-lsp.mjs"),
             node_version_requirement=">=18",
         )
-        context.configuration.command = start_command(context.configuration.command, first)
+        context.configuration.command = start_command(context.configuration.command, may_launch)
 
     def __init__(self, weaksession: ref[Session]) -> None:
         super().__init__(weaksession)
@@ -382,15 +392,16 @@ class DynotableViewListener(sublime_plugin.ViewEventListener):
     session ended; a view that never had a session needs this check.
     """
 
+    @classmethod
+    def is_applicable(cls, settings: sublime.Settings) -> bool:
+        # Only the package's own syntaxes. LSP applies the `selector`, with its project overrides, when it attaches.
+        return settings.get("syntax") in _SYNTAXES
+
     def __init__(self, view: sublime.View) -> None:
         super().__init__(view)
         self.waiting = False
 
     def on_activated_async(self) -> None:
-        syntax = self.view.syntax()
-        selector = sublime.load_settings(f"{LspDynotablePlugin.name}.sublime-settings").get("selector")
-        if not syntax or not isinstance(selector, str) or sublime.score_selector(syntax.scope, selector) <= 0:
-            return
         if not self.waiting:
             self.recover_async()
 

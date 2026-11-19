@@ -84,15 +84,19 @@ def _pid_alive_windows(pid: int) -> bool:
 
 
 def gate(
-    first_start_pending: bool, app_running: bool, refused_windows: AbstractSet[int], window_id: int | None
+    first_start_pending: bool,
+    launch_app: bool,
+    app_running: bool,
+    refused_windows: AbstractSet[int],
+    window_id: int | None,
 ) -> bool:
     """
-    May a server start now in this window? Only the first start may launch a closed app.
+    May a server start now in this window? Only the first start, and only with `launch_app`, may launch a closed app.
 
     A refusal closes the gate only in its own window: a bad `.dynotable.json` in one project must not stop the
     healthy session of another window from taking new files.
     """
-    return first_start_pending or (app_running and window_id not in refused_windows)
+    return (first_start_pending and launch_app) or (app_running and window_id not in refused_windows)
 
 
 def recovery_step(attached: bool, refused: bool, starting: bool, app_running: bool) -> str:
@@ -109,9 +113,9 @@ def recovery_step(attached: bool, refused: bool, starting: bool, app_running: bo
     return "check" if app_running else "skip"
 
 
-def start_command(base: list[str], first_start: bool) -> list[str]:
-    """Only the first start may launch the app. A later start that the gate lets through by mistake still cannot."""
-    return list(base) if first_start else [*base, "--no-launch"]
+def start_command(base: list[str], may_launch: bool) -> list[str]:
+    """A start that may not launch the app gets `--no-launch`: then a start that the gate lets through cannot."""
+    return list(base) if may_launch else [*base, "--no-launch"]
 
 
 def latches_refusal(initialized: bool, app_running: bool) -> bool:
